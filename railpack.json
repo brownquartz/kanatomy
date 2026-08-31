@@ -1,15 +1,6 @@
 {
   "$schema": "https://schema.railpack.com",
-  "steps": {
-    "install": {
-      "commands": ["npm install", "npm install --prefix server"]
-    },
-    "build": {
-      "inputs": [{ "step": "install" }],
-      "commands": ["npm run build"]
-    }
-  },
   "deploy": {
-    "startCommand": "node server/index.js"
+    "startCommand": "npm install --omit=dev --prefix server && node server/index.js"
   }
 }
