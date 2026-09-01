@@ -11,7 +11,7 @@
     <meta name="description" content="漢字を部首・パーツに分解したり、部品から漢字を検索できる無料Webツール。「この漢字の部品は？」「この部品を含む漢字は？」をすぐ調べられます。常用漢字・日本漢字・中国漢字対応。" />
 
     <!-- canonical -->
-    <link rel="canonical" href="https://TODO-kanatomy-domain/" />
+    <link rel="canonical" href="https://kanatomy-production.up.railway.app/" />
 
     <!-- 検索キーワード -->
     <meta name="keywords" content="漢字, 部首, 部品, 漢字検索, 漢字分解, 漢字辞典, 部首検索, 漢字 調べる, 漢字 成り立ち, 漢字 パーツ, 常用漢字" />
@@ -20,8 +20,8 @@
     <meta property="og:title" content="kanatomy｜部首・パーツで漢字を調べる辞典" />
     <meta property="og:description" content="漢字を部品に分解したり、部品から漢字を検索できる無料Webツール。常用漢字・日本漢字・中国漢字対応。" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://TODO-kanatomy-domain/" />
-    <meta property="og:image" content="https://TODO-kanatomy-domain/images/logo.png" />
+    <meta property="og:url" content="https://kanatomy-production.up.railway.app/" />
+    <meta property="og:image" content="https://kanatomy-production.up.railway.app/images/logo.png" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary" />
@@ -30,10 +30,12 @@
 
     <link rel="icon" type="image/png" href="%PUBLIC_URL%/images/logo.png" />
 
-    <!-- 中国語圏の漢字（表示端末の標準フォントに無いことが多い）用のフォールバックフォント -->
+    <!-- Noto Sans JP: 日本語の字形を正しく表示するため最優先で読み込む。
+         Noto Sans SC/TC は、日本語フォントでカバーされない中国語圏の漢字だけの
+         フォールバック（font-family の並び順で制御。MainApp.css 参照）。 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC&family=Noto+Sans+TC&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&family=Noto+Sans+SC&family=Noto+Sans+TC&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>

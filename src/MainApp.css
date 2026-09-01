@@ -6,8 +6,9 @@
   background: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  /* 中国語圏の漢字は端末標準フォントに無いことが多いため、Noto Sans SC/TC をフォールバックに追加 */
-  font-family: 'Segoe UI', Roboto, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  /* 日本語の字形が正しく出るよう Noto Sans JP を先に。中国語圏の漢字（Noto Sans JP に
+     無い字だけ）は Noto Sans SC/TC にフォールバックする。 */
+  font-family: 'Segoe UI', Roboto, 'Noto Sans JP', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
 }
 
 .header {
