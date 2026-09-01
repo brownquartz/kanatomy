@@ -1,5 +1,5 @@
 // src/MainApp.js
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import HandwritingCanvas from './HandwritingCanvas';
 import SearchRanking from './SearchRanking';
@@ -10,22 +10,48 @@ const API_URL = process.env.REACT_APP_API_URL ?? 'http://localhost:4000';
 // データ・コードには一切依存しない（一方向のリンクのみ）。
 const MEANJI_URL = process.env.REACT_APP_MEANJI_URL ?? 'http://localhost:4001';
 
+// 検索結果から漢字詳細ページに移動→ブラウザで戻った時、検索語・結果を保持しておくための
+// sessionStorage キー。MainApp は "/kanji/:char" への遷移で一旦アンマウントされるため、
+// 通常のReact state だけでは戻った時に消えてしまう。
+const STORAGE_KEY = 'kanatomy:searchState';
+function loadSavedState() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MainApp() {
   const navigate = useNavigate();
+  const saved = loadSavedState();
 
-  const [inputValue, setInputValue] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [mode, setMode] = useState('partsToKanji');
-  const [region, setRegion] = useState('joyo');
-  const [results, setResults] = useState([]);
-  const [page, setPage] = useState(1);
+  const [inputValue, setInputValue] = useState(saved?.inputValue ?? '');
+  const [searchTerm, setSearchTerm] = useState(saved?.searchTerm ?? '');
+  const [mode, setMode] = useState(saved?.mode ?? 'partsToKanji');
+  const [region, setRegion] = useState(saved?.region ?? 'joyo');
+  const [results, setResults] = useState(saved?.results ?? []);
+  const [page, setPage] = useState(saved?.page ?? 1);
   const [loading, setLoading] = useState(false);
   const MAX_DISPLAY = 100;
 
   // 引き算モード
-  const [subMinuend, setSubMinuend] = useState('');
-  const [subSubtrahend, setSubSubtrahend] = useState('');
-  const [subRemainingParts, setSubRemainingParts] = useState([]);
+  const [subMinuend, setSubMinuend] = useState(saved?.subMinuend ?? '');
+  const [subSubtrahend, setSubSubtrahend] = useState(saved?.subSubtrahend ?? '');
+  const [subRemainingParts, setSubRemainingParts] = useState(saved?.subRemainingParts ?? []);
+
+  // 検索に関わる状態が変わるたびに保存しておく（結果ページへの遷移→戻る、で復元するため）
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        inputValue, searchTerm, mode, region, results, page,
+        subMinuend, subSubtrahend, subRemainingParts,
+      }));
+    } catch {
+      // sessionStorageが使えない環境でも致命的ではないので無視
+    }
+  }, [inputValue, searchTerm, mode, region, results, page, subMinuend, subSubtrahend, subRemainingParts]);
 
   const doSearch = useCallback(async (term, currentMode, currentRegion) => {
     if (!term) { setResults([]); return; }
