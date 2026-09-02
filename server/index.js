@@ -411,8 +411,14 @@ app.get('/api/kanji/:char', async (req, res) => {
   const char = req.params.char;
   const client = await pool.connect();
   try {
+    // visual_hash(512bit)はこのAPIでは不要（レスポンスが無駄に大きくなる）ので除外
     const [kanjiRes, partsRes] = await Promise.all([
-      client.query(`SELECT * FROM kanji WHERE character = $1`, [char]),
+      client.query(
+        `SELECT character, unicode_point, is_joyo, is_japanese, on_yomi, kun_yomi,
+                example_yomi, stroke_count, jlpt_level, grade, frequency, radical, meanings
+         FROM kanji WHERE character = $1`,
+        [char]
+      ),
       client.query(`SELECT part_char FROM kanji_parts WHERE kanji_char = $1`, [char]),
     ]);
     if (!kanjiRes.rows.length) return res.status(404).json({ error: 'not found' });
@@ -420,6 +426,42 @@ app.get('/api/kanji/:char', async (req, res) => {
       ...kanjiRes.rows[0],
       parts: partsRes.rows.map(r => r.part_char),
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── GET /api/kanji/:char/similar ────────────────────────────────────────────
+// 見た目が似ている漢字を、事前計算済みの視覚ハッシュ(phash+dhash, 計512bit)の
+// ハミング距離が近い順に返す。距離はDB側の bit_count(a # b) で計算する
+// （XORで異なるビットを数えるだけなので、対象規模なら全件スキャンでも十分速い）。
+app.get('/api/kanji/:char/similar', async (req, res) => {
+  const char = req.params.char;
+  const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
+  const client = await pool.connect();
+  try {
+    const { rows: selfRows } = await client.query(
+      `SELECT visual_hash FROM kanji WHERE character = $1`,
+      [char]
+    );
+    if (!selfRows.length || selfRows[0].visual_hash === null) {
+      return res.json({ results: [] });
+    }
+    const { rows } = await client.query(
+      `SELECT character, bit_count(visual_hash # $1::bit(512)) AS distance
+       FROM kanji
+       WHERE visual_hash IS NOT NULL AND character != $2
+       ORDER BY distance ASC
+       LIMIT $3`,
+      [selfRows[0].visual_hash, char, limit]
+    );
+    const results = rows.map(r => ({
+      character: r.character,
+      score: Math.round(100 * (1 - r.distance / 512) * 10) / 10,
+    }));
+    res.json({ results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {

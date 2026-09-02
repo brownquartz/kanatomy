@@ -12,6 +12,7 @@ const MEANJI_URL = process.env.REACT_APP_MEANJI_URL ?? 'http://localhost:4001';
 export default function DetailsPage({ kanji, onPartClick }) {
   const [data, setData] = useState(null);
   const [words, setWords] = useState(null);
+  const [similar, setSimilar] = useState(null);
 
   useEffect(() => {
     setData(null);
@@ -19,6 +20,14 @@ export default function DetailsPage({ kanji, onPartClick }) {
       .then(r => r.json())
       .then(setData)
       .catch(console.error);
+  }, [kanji]);
+
+  useEffect(() => {
+    setSimilar(null);
+    fetch(`${API_URL}/api/kanji/${encodeURIComponent(kanji)}/similar?limit=16`)
+      .then(r => r.json())
+      .then(d => setSimilar(d.results || []))
+      .catch(() => setSimilar([]));
   }, [kanji]);
 
   useEffect(() => {
@@ -66,6 +75,25 @@ export default function DetailsPage({ kanji, onPartClick }) {
             {data.parts.map((p, i) => (
               <li key={i} onClick={() => onPartClick?.(p)} className="part-item">
                 {p}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {similar?.length > 0 && (
+        <div className="similar-kanji">
+          <p>似ている漢字:</p>
+          <ul className="parts-list">
+            {similar.map((s, i) => (
+              <li
+                key={i}
+                onClick={() => onPartClick?.(s.character)}
+                className="part-item similar-item"
+                title={`類似度 ${s.score}点`}
+              >
+                <span>{s.character}</span>
+                <span className="similar-score">{s.score}</span>
               </li>
             ))}
           </ul>
