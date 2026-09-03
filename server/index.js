@@ -1,10 +1,21 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
+
+// Railwayはプロキシ経由なので、express-rate-limit等がクライアントの実IPを
+// 正しく見られるように（無いと全リクエストがプロキシのIP扱いになり、
+// レート制限が実質1人分になってしまう）
+app.set('trust proxy', 1);
+
+app.use(helmet({
+  contentSecurityPolicy: false, // SPAの構成上、まずは無効化（必要なら後で個別に設定する）
+}));
 app.use(express.json());
 
 // TODO: 独自ドメインを設定したら、そのURLも追加する
@@ -22,6 +33,27 @@ app.use(cors({
     }
   },
 }));
+
+// ─── レート制限 ────────────────────────────────────────────────────────────────
+// 全体の緩い上限 + 重い/悪用されやすいエンドポイント用の厳しい上限、の2段構え
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many requests, please try again later' },
+});
+app.use('/api/', apiLimiter);
+
+// 手書き認識はGoogleの外部APIへのプロキシなので、乱用されるとそのAPI自体が
+// ブロックされ、全ユーザーが使えなくなるリスクがある。より厳しく制限する。
+const handwritingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many requests, please try again later' },
+});
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -186,6 +218,11 @@ async function scoreCandidates(client, candidates, inputParts, limit = 100) {
 app.post('/api/search', async (req, res) => {
   const { parts, mode, region } = req.body;
   if (!parts?.length) return res.json({ results: [] });
+  // 部品数に上限を設ける（異体字展開のcartesian積が組み合わせ爆発を起こし、
+  // DoS的な負荷をかけられる可能性があるため）
+  if (parts.length > 30) {
+    return res.status(400).json({ error: 'too many parts' });
+  }
 
   // Feature 7: 検索ログを記録（fire-and-forget）
   const query = parts.join('');
@@ -266,7 +303,8 @@ app.post('/api/search', async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -300,7 +338,8 @@ app.get('/api/ranking', async (req, res) => {
     res.json({ period, limit: limitNum, ranking: rows });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -398,7 +437,8 @@ app.post('/api/search/subtract', async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -427,7 +467,8 @@ app.get('/api/kanji/:char', async (req, res) => {
       parts: partsRes.rows.map(r => r.part_char),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -560,7 +601,8 @@ app.get('/api/kanji/:char/similar', async (req, res) => {
 
     res.json({ results });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -612,7 +654,8 @@ app.get('/api/kanji/:char/tree', async (req, res) => {
     const tree = await fetchDirectPartsTree(client, char);
     res.json({ tree });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
   }
@@ -620,7 +663,7 @@ app.get('/api/kanji/:char/tree', async (req, res) => {
 
 // ─── Feature 4: POST /api/handwriting ────────────────────────────────────────
 // body: { ink, width, height }
-app.post('/api/handwriting', async (req, res) => {
+app.post('/api/handwriting', handwritingLimiter, async (req, res) => {
   const { ink, width, height } = req.body;
   if (!ink) return res.status(400).json({ error: 'ink is required' });
 
