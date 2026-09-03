@@ -88,11 +88,9 @@ export default function DetailsPage({ kanji, onPartClick }) {
               <li
                 key={i}
                 onClick={() => onPartClick?.(s.character)}
-                className="part-item similar-item"
-                title={`類似度 ${s.score}点`}
+                className="part-item"
               >
-                <span>{s.character}</span>
-                <span className="similar-score">{s.score}</span>
+                {s.character}
               </li>
             ))}
           </ul>

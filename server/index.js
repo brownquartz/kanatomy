@@ -433,34 +433,131 @@ app.get('/api/kanji/:char', async (req, res) => {
   }
 });
 
+// ─── 部品ベースの「ほぼ同じ構成」判定 ─────────────────────────────────────────
+// 直接部品(layer_index=0)の構成が、対象漢字とちょうど1個だけ異なる漢字を探す
+// （例: 仙=[亻,山] に対して、[亻,土]を持つような字）。
+//
+// 注意: 亻・氵・艹のような超頻出部品だと「1個だけ違う」がほぼ何にでも当てはまって
+// しまい(「亻+なにか」が全部ヒットする)ノイズだらけになる。なので、差分になっている
+// 部品どうしが視覚的にも近い(=見た目としても本当に間違えそうな)場合だけ採用する。
+const STRUCTURAL_VISUAL_THRESHOLD = 75; // 100点満点中。55だと単純な部品はほぼ何でも通ってしまったため
+const STRUCTURAL_CANDIDATE_LIMIT = 500; // 超頻出部品での異常な件数に対する安全弁
+
+async function findStructuralNearMatches(client, char) {
+  const { rows: selfRows } = await client.query(
+    `SELECT parts FROM kanji_patterns WHERE kanji_char = $1 AND layer_index = 0`,
+    [char]
+  );
+  if (!selfRows.length) return [];
+  const selfParts = selfRows[0].parts.filter(p => p !== char && p.codePointAt(0) > 0x007F);
+  if (selfParts.length < 2) return []; // 部品1個(=単純な字)は比較対象にしない
+
+  // 候補は「読みが判明している(=KANJIDIC2に載っている実在の漢字)」ものだけに絞る。
+  // 分解データにしか出てこないような超レアな断片文字（読み無し）は、部品が1個
+  // 違うだけで大量にヒットしてしまいノイズになるため対象外にする。
+  const { rows } = await client.query(
+    `SELECT kp.kanji_char, kp.parts FROM kanji_patterns kp
+     JOIN kanji k ON k.character = kp.kanji_char
+     WHERE kp.layer_index = 0 AND kp.kanji_char != $1 AND kp.parts && $2::text[]
+       AND (k.on_yomi IS NOT NULL OR k.kun_yomi IS NOT NULL)
+     LIMIT $3`,
+    [char, selfParts, STRUCTURAL_CANDIDATE_LIMIT]
+  );
+
+  const selfSet = new Set(selfParts);
+  const candidates = []; // { char, diffFrom, diffTo }
+  for (const row of rows) {
+    const candParts = row.parts.filter(p => p !== row.kanji_char && p.codePointAt(0) > 0x007F);
+    if (candParts.length !== selfParts.length) continue; // 部品数が同じ字だけ比較する
+    const diffTo = candParts.filter(p => !selfSet.has(p));
+    if (diffTo.length !== 1) continue; // ちょうど1個だけ違う（重複部品がある場合は単純化のためスキップ）
+    const diffFrom = selfParts.filter(p => !candParts.includes(p));
+    if (diffFrom.length !== 1) continue;
+    candidates.push({ char: row.kanji_char, diffFrom: diffFrom[0], diffTo: diffTo[0] });
+  }
+  if (!candidates.length) return [];
+
+  // 差分部品どうしの視覚的な近さを判定する。ペアごとにDB往復すると（候補数が多い
+  // 頻出部品では）N+1で非常に遅くなるので、必要な文字のvisual_hashを1クエリで
+  // まとめて取得し、ハミング距離はJS側の文字列比較だけで計算する（DB往復なし）。
+  const diffChars = [...new Set(candidates.flatMap(c => [c.diffFrom, c.diffTo]))];
+  const { rows: hashRows } = await client.query(
+    `SELECT character, visual_hash::text AS hash FROM kanji WHERE character = ANY($1)`,
+    [diffChars]
+  );
+  const hashMap = new Map(hashRows.map(r => [r.character, r.hash]));
+
+  function visualScore(a, b) {
+    const ha = hashMap.get(a);
+    const hb = hashMap.get(b);
+    if (!ha || !hb) return 0;
+    let dist = 0;
+    for (let i = 0; i < ha.length; i++) if (ha[i] !== hb[i]) dist++;
+    return 100 * (1 - dist / ha.length);
+  }
+
+  const passed = candidates.filter(c => visualScore(c.diffFrom, c.diffTo) >= STRUCTURAL_VISUAL_THRESHOLD);
+  if (!passed.length) return [];
+
+  // 常用漢字・使用頻度の高い字を優先する（「読みがある」だけだとCJK拡張領域の
+  // 超レアな字も混ざるため、実際によく使われるものを上に出す）
+  const { rows: metaRows } = await client.query(
+    `SELECT character, is_joyo, frequency FROM kanji WHERE character = ANY($1)`,
+    [passed.map(c => c.char)]
+  );
+  const metaByChar = new Map(metaRows.map(r => [r.character, r]));
+  passed.sort((a, b) => {
+    const ma = metaByChar.get(a.char) || {};
+    const mb = metaByChar.get(b.char) || {};
+    if (!!mb.is_joyo !== !!ma.is_joyo) return (mb.is_joyo ? 1 : 0) - (ma.is_joyo ? 1 : 0);
+    return (ma.frequency ?? Infinity) - (mb.frequency ?? Infinity);
+  });
+
+  return passed.map(c => c.char);
+}
+
 // ─── GET /api/kanji/:char/similar ────────────────────────────────────────────
-// 見た目が似ている漢字を、事前計算済みの視覚ハッシュ(phash+dhash, 計512bit)の
-// ハミング距離が近い順に返す。距離はDB側の bit_count(a # b) で計算する
-// （XORで異なるビットを数えるだけなので、対象規模なら全件スキャンでも十分速い）。
+// 「似ている漢字」を2つのシグナルで集めて統合する:
+//   1. 見た目(視覚ハッシュ, phash+dhash)が近い順 — 事前計算済みなのでDB側のbit_count(a#b)で瞬時
+//   2. 直接部品の構成がちょうど1個だけ違う（部首の見間違い等、確度が非常に高いシグナル）
 app.get('/api/kanji/:char/similar', async (req, res) => {
   const char = req.params.char;
   const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
   const client = await pool.connect();
   try {
+    const structural = (await findStructuralNearMatches(client, char)).slice(0, limit);
+
     const { rows: selfRows } = await client.query(
       `SELECT visual_hash FROM kanji WHERE character = $1`,
       [char]
     );
-    if (!selfRows.length || selfRows[0].visual_hash === null) {
-      return res.json({ results: [] });
+    let visual = [];
+    if (selfRows.length && selfRows[0].visual_hash !== null) {
+      const { rows } = await client.query(
+        `SELECT character, bit_count(visual_hash # $1::bit(512)) AS distance
+         FROM kanji
+         WHERE visual_hash IS NOT NULL AND character != $2
+         ORDER BY distance ASC
+         LIMIT $3`,
+        [selfRows[0].visual_hash, char, limit]
+      );
+      visual = rows.map(r => ({ character: r.character }));
     }
-    const { rows } = await client.query(
-      `SELECT character, bit_count(visual_hash # $1::bit(512)) AS distance
-       FROM kanji
-       WHERE visual_hash IS NOT NULL AND character != $2
-       ORDER BY distance ASC
-       LIMIT $3`,
-      [selfRows[0].visual_hash, char, limit]
-    );
-    const results = rows.map(r => ({
-      character: r.character,
-      score: Math.round(100 * (1 - r.distance / 512) * 10) / 10,
-    }));
+
+    // 部品構成の一致(確度が高い)を先頭に、重複を除きつつ視覚類似度で埋める
+    const seen = new Set();
+    const results = [];
+    for (const character of structural) {
+      if (seen.has(character)) continue;
+      seen.add(character);
+      results.push({ character });
+    }
+    for (const r of visual) {
+      if (seen.has(r.character) || results.length >= limit) continue;
+      seen.add(r.character);
+      results.push(r);
+    }
+
     res.json({ results });
   } catch (err) {
     res.status(500).json({ error: err.message });
