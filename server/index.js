@@ -107,45 +107,9 @@ async function expandWithVariants(client, parts) {
 }
 
 // ─── Feature 8: calcScore ヘルパー ────────────────────────────────────────────
-// patternParts: DB から取得した漢字のパーツ配列（row.parts。重複あり得る）
-// inputParts:   ユーザーが入力した検索パーツ配列（重複あり得る。例: 品→"口口口"）
-//
-// recall（要求した部品をどれだけ満たせたか）を主軸に、precision（候補が要求部品
-// 以外の余計な部品でどれだけ埋まっていないか）と順序ボーナスを加える。
-// 以前は precision 相当の値だけを見ていたため、候補側の部品数が少ないだけで
-// スコアが不当に高くなり（要求部品を一部しか満たしていなくても100%扱いになる）、
-// 並び順がおかしく見える原因になっていた。
-function calcScore(patternParts, inputParts) {
-  const kanjiParts = patternParts.filter(p => p.codePointAt(0) > 0x007F);
-  const total = kanjiParts.length;
-  if (!total || !inputParts.length) return 0;
-
-  const inputCnt = {};
-  inputParts.forEach(p => (inputCnt[p] = (inputCnt[p] || 0) + 1));
-  const candCnt = {};
-  kanjiParts.forEach(p => (candCnt[p] = (candCnt[p] || 0) + 1));
-
-  let match = 0;
-  Object.entries(inputCnt).forEach(([p, n]) => {
-    match += Math.min(n, candCnt[p] || 0);
-  });
-
-  const recall = match / inputParts.length; // 要求部品をどれだけ満たしたか（最重要）
-  const precision = match / total;          // 候補が要求部品でどれだけ占められているか
-
-  // order bonus: inputParts が patternParts の部分列（subsequence）として現れるか確認
-  let ptr = 0;
-  let orderMatched = 0;
-  for (const pp of patternParts) {
-    if (ptr < inputParts.length && pp === inputParts[ptr]) {
-      orderMatched++;
-      ptr++;
-    }
-  }
-  const orderBonus = (orderMatched / inputParts.length) * 10;
-
-  return recall * 70 + precision * 30 + orderBonus;
-}
+// 実体は server/lib/calcScore.js（DB非依存の純粋関数として切り出し、単体テスト対象にしている）
+const { calcScore } = require('./lib/calcScore');
+const { isExactMultisetMatch } = require('./lib/multiset');
 
 // ─── 指定した部品（重複可）を"すべて"含む漢字の候補集合を求めるヘルパー ─────────
 // 部品ごとに異体字も同一視して探す。kanji_parts は (kanji_char, part_char) の
@@ -303,7 +267,6 @@ app.post('/api/search', async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    console.error(err);
     res.status(500).json({ error: 'internal server error' });
   } finally {
     client.release();
@@ -337,7 +300,6 @@ app.get('/api/ranking', async (req, res) => {
     );
     res.json({ period, limit: limitNum, ranking: rows });
   } catch (err) {
-    console.error(err);
     console.error(err);
     res.status(500).json({ error: 'internal server error' });
   } finally {
@@ -403,12 +365,9 @@ app.post('/api/search/subtract', async (req, res) => {
 
     // 「含む」候補プールから、直接部品（layer_index=0）が remaining と
     // ちょうど一致する漢字だけに絞り込む（＝厳密な引き算結果）。個数（多重度）も
-    // 見る必要がある（例: remaining=[口,口] のとき、口が1個の漢字は不一致）。
+    // 見る必要がある（例: remaining=[口,口] のとき、口が1個の漢字は不一致）ので
+    // isExactMultisetMatch で多重集合として比較する。
     // 候補ごとに逐次クエリすると遅いので、1回のクエリでまとめて取得する。
-    const remainingCnt = {};
-    remaining.forEach(p => (remainingCnt[p] = (remainingCnt[p] || 0) + 1));
-    const remainingTotal = remaining.length;
-
     const { rows: patternsForCandidates } = candidates.length
       ? await client.query(
           `SELECT kanji_char, parts FROM kanji_patterns WHERE kanji_char = ANY($1) AND layer_index = 0`,
@@ -426,17 +385,12 @@ app.post('/api/search/subtract', async (req, res) => {
       const parts = patternMap.get(k);
       if (!parts) continue;
       const kParts = parts.filter(p => p.codePointAt(0) > 0x007F);
-      if (kParts.length !== remainingTotal) continue;
-      const kCnt = {};
-      kParts.forEach(p => (kCnt[p] = (kCnt[p] || 0) + 1));
-      const isExact = Object.entries(remainingCnt).every(([p, n]) => kCnt[p] === n);
-      if (isExact) exactMatches.push(k);
+      if (isExactMultisetMatch(remaining, kParts)) exactMatches.push(k);
     }
 
     return res.json({ results: exactMatches, remainingParts: remaining });
 
   } catch (err) {
-    console.error(err);
     console.error(err);
     res.status(500).json({ error: 'internal server error' });
   } finally {
