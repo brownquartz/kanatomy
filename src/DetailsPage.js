@@ -99,7 +99,7 @@ export default function DetailsPage({ kanji, onPartClick }) {
 
       {words?.length > 0 && (
         <div className="kanji-words">
-          <p>この漢字を使った熟語(meanjiで詳しく見る):</p>
+          <p>この漢字を使った熟語(辞書で詳しく見る):</p>
           <ul className="parts-list">
             {words.map((w, i) => (
               <li key={i} className="part-item">
