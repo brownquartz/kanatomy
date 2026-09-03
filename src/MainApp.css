@@ -513,6 +513,58 @@
   color: #888;
 }
 
+/* 分解ツリー */
+.parts-tree {
+  text-align: left;
+  margin-top: 1rem;
+}
+.parts-tree__root,
+.parts-tree__children {
+  list-style: none;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+.parts-tree__root {
+  padding-left: 0;
+  margin-top: 0.5rem;
+}
+.parts-tree__node {
+  margin: 0.15rem 0;
+}
+.parts-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.parts-tree__toggle {
+  width: 1.2rem;
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #888;
+  font-size: 0.7rem;
+  padding: 0;
+}
+.parts-tree__toggle--leaf {
+  cursor: default;
+}
+.parts-tree__char {
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.parts-tree__char:hover {
+  background: #eef5ff;
+  color: #007bff;
+}
+.parts-tree__leaf-label {
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
 /* 熟語(部品から) */
 .char-slot {
   display: inline-flex;

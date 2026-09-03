@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import MeaningsList from './MeaningsList';
+import PartsTree from './PartsTree';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL ?? 'http://localhost:4000';
@@ -13,6 +14,7 @@ export default function DetailsPage({ kanji, onPartClick }) {
   const [data, setData] = useState(null);
   const [words, setWords] = useState(null);
   const [similar, setSimilar] = useState(null);
+  const [tree, setTree] = useState(null);
 
   useEffect(() => {
     setData(null);
@@ -20,6 +22,14 @@ export default function DetailsPage({ kanji, onPartClick }) {
       .then(r => r.json())
       .then(setData)
       .catch(console.error);
+  }, [kanji]);
+
+  useEffect(() => {
+    setTree(null);
+    fetch(`${API_URL}/api/kanji/${encodeURIComponent(kanji)}/tree`)
+      .then(r => r.json())
+      .then(d => setTree(d.tree))
+      .catch(() => setTree(null));
   }, [kanji]);
 
   useEffect(() => {
@@ -68,18 +78,7 @@ export default function DetailsPage({ kanji, onPartClick }) {
         </div>
       )}
 
-      {data.parts?.length > 0 && (
-        <div className="parts">
-          <p>部品:</p>
-          <ul className="parts-list">
-            {data.parts.map((p, i) => (
-              <li key={i} onClick={() => onPartClick?.(p)} className="part-item">
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <PartsTree tree={tree} onPartClick={onPartClick} />
 
       {similar?.length > 0 && (
         <div className="similar-kanji">

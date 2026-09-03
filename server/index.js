@@ -469,6 +469,58 @@ app.get('/api/kanji/:char/similar', async (req, res) => {
   }
 });
 
+// ─── 漢字の親子ツリー構築ヘルパー ─────────────────────────────────────────────
+// 「理→[王, 里→[田,土]]」のような素直な親子構造を作る。既存の kanji_patterns の
+// 「レイヤーごとに累積展開」データとは別に、各漢字自身の layer_index=0（直接部品）
+// だけを再帰的にたどる。1ノードずつ問い合わせるとN+1になるので、深さごとに
+// まとめて取得するBFSにしている（深い漢字でも数クエリで済む）。
+async function fetchDirectPartsTree(client, rootChar, maxDepth = 12) {
+  const directParts = new Map(); // char -> string[]（自分自身を除くHan文字の直接部品）
+  let frontier = [rootChar];
+  const seen = new Set(frontier);
+
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const { rows } = await client.query(
+      `SELECT kanji_char, parts FROM kanji_patterns WHERE kanji_char = ANY($1) AND layer_index = 0`,
+      [frontier]
+    );
+    const next = [];
+    for (const row of rows) {
+      const parts = row.parts.filter(p => p !== row.kanji_char && p.codePointAt(0) > 0x007F);
+      directParts.set(row.kanji_char, parts);
+      for (const p of parts) {
+        if (!seen.has(p)) { seen.add(p); next.push(p); }
+      }
+    }
+    frontier = next;
+  }
+
+  // 循環参照ガード付きでツリーに組み立てる
+  function build(char, ancestors) {
+    if (ancestors.has(char)) return { character: char, parts: [] };
+    const parts = directParts.get(char) || [];
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(char);
+    return { character: char, parts: parts.map(p => build(p, nextAncestors)) };
+  }
+  return build(rootChar, new Set());
+}
+
+// ─── GET /api/kanji/:char/tree ────────────────────────────────────────────────
+// 「似ている漢字への差し替え」等とは別の、素直な親子分解ツリー表示用API。
+app.get('/api/kanji/:char/tree', async (req, res) => {
+  const char = req.params.char;
+  const client = await pool.connect();
+  try {
+    const tree = await fetchDirectPartsTree(client, char);
+    res.json({ tree });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ─── Feature 4: POST /api/handwriting ────────────────────────────────────────
 // body: { ink, width, height }
 app.post('/api/handwriting', async (req, res) => {
