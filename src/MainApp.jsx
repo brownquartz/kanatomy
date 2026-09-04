@@ -5,10 +5,10 @@ import HandwritingCanvas from './HandwritingCanvas';
 import SearchRanking from './SearchRanking';
 import './MainApp.css';
 
-const API_URL = process.env.REACT_APP_API_URL ?? 'http://localhost:4000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 // meanji（辞書サイト、別リポジトリ/別デプロイ）への外部リンク。kanatomy はこの先の
 // データ・コードには一切依存しない（一方向のリンクのみ）。
-const MEANJI_URL = process.env.REACT_APP_MEANJI_URL ?? 'http://localhost:4001';
+const MEANJI_URL = import.meta.env.VITE_MEANJI_URL ?? 'http://localhost:4001';
 
 // 検索結果から漢字詳細ページに移動→ブラウザで戻った時、検索語・結果を保持しておくための
 // sessionStorage キー。MainApp は "/kanji/:char" への遷移で一旦アンマウントされるため、

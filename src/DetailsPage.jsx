@@ -5,11 +5,11 @@ import MeaningsList from './MeaningsList';
 import PartsTree from './PartsTree';
 import './App.css';
 
-const API_URL = process.env.REACT_APP_API_URL ?? 'http://localhost:4000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 // meanji（辞書サイト、別リポジトリ/別デプロイ）への外部リンク。kanatomy はこの先の
 // データ・コードには一切依存しない（一方向のリンクのみ）。
-const MEANJI_URL = process.env.REACT_APP_MEANJI_URL ?? 'http://localhost:4001';
-const SITE_URL = process.env.REACT_APP_SITE_URL ?? 'http://localhost:3000';
+const MEANJI_URL = import.meta.env.VITE_MEANJI_URL ?? 'http://localhost:4001';
+const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:3000';
 
 export default function DetailsPage({ kanji, onPartClick }) {
   const [data, setData] = useState(null);
