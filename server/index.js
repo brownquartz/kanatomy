@@ -663,8 +663,11 @@ app.get('/sitemap.xml', async (req, res) => {
   const rootUrl = 'https://kanatomy.brwqz.net';
   const client = await pool.connect();
   try {
+    // is_joyo に絞らず、実際に読み（音読み/訓読み）を持つ = 辞書として意味のある
+    // ページだけを対象にする（/similar の構造マッチと同じ品質フィルタ）。
+    // is_joyo だけだと2136字しか拾えないが、これなら約13,000字を拾える。
     const { rows } = await client.query(
-      `SELECT character FROM kanji WHERE is_joyo = true ORDER BY character`
+      `SELECT character FROM kanji WHERE on_yomi IS NOT NULL OR kun_yomi IS NOT NULL ORDER BY character`
     );
 
     const urls = [
