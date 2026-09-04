@@ -18,8 +18,8 @@ app.use(helmet({
 }));
 app.use(express.json());
 
-// TODO: 独自ドメインを設定したら、そのURLも追加する
 const allowedOrigins = [
+  'https://kanatomy.brwqz.net',
   'https://kanatomy-production.up.railway.app',
   'http://localhost:3000',
 ];
@@ -660,8 +660,7 @@ app.post('/api/handwriting', handwritingLimiter, async (req, res) => {
 
 // ─── Feature 6: GET /sitemap.xml（express.static の前に配置）─────────────────
 app.get('/sitemap.xml', async (req, res) => {
-  // TODO: 独自ドメインを設定したら差し替える
-  const rootUrl = 'https://kanatomy-production.up.railway.app';
+  const rootUrl = 'https://kanatomy.brwqz.net';
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
