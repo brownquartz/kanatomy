@@ -25,6 +25,7 @@ yarn-error.log*
 
 # no-need files (data moved to DB)
 /public/*.json
+!/public/manifest.json
 /public/pattern_chunks/
 
 # claude
