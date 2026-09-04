@@ -9,6 +9,7 @@ const API_URL = process.env.REACT_APP_API_URL ?? 'http://localhost:4000';
 // meanji（辞書サイト、別リポジトリ/別デプロイ）への外部リンク。kanatomy はこの先の
 // データ・コードには一切依存しない（一方向のリンクのみ）。
 const MEANJI_URL = process.env.REACT_APP_MEANJI_URL ?? 'http://localhost:4001';
+const SITE_URL = process.env.REACT_APP_SITE_URL ?? 'http://localhost:3000';
 
 export default function DetailsPage({ kanji, onPartClick }) {
   const [data, setData] = useState(null);
@@ -62,8 +63,10 @@ export default function DetailsPage({ kanji, onPartClick }) {
       <Helmet>
         <title>漢字情報：{kanji}｜kanatomy</title>
         <meta name="description" content={description} />
+        <link rel="canonical" href={`${SITE_URL}/kanji/${encodeURIComponent(kanji)}`} />
         <meta property="og:title" content={`漢字情報：${kanji}`} />
         <meta property="og:description" content={description} />
+        <meta property="og:url" content={`${SITE_URL}/kanji/${encodeURIComponent(kanji)}`} />
       </Helmet>
 
       <h2>{kanji}</h2>
