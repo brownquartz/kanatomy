@@ -1,8 +1,14 @@
 body {
   margin: 0;
+  /* 日本語の字形が正しく出るよう Noto Sans JP を先に。中国語圏の漢字（Noto Sans JP に
+     無い字だけ）は Noto Sans SC/TC にフォールバックする。
+     以前は .app-container だけに指定していたが、/kanji/:char（詳細ページ）は
+     .app-container の外にあるルートなのでこの指定が効かず、CRA デフォルトの
+     欧文だけのスタックまで落ちて OS 標準の中国語スタイル CJK フォントで
+     描画されてしまっていた。body に置くことで全ページに効くようにする。 */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+    'Noto Sans JP', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
