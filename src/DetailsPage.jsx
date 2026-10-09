@@ -81,6 +81,19 @@ export default function DetailsPage({ kanji, onPartClick }) {
         </div>
       )}
 
+      {words?.length > 0 && (
+        <div className="kanji-words">
+          <p>この漢字を使った熟語(辞書で詳しく見る):</p>
+          <ul className="parts-list">
+            {words.map((w, i) => (
+              <li key={i} className="part-item">
+                <a href={`${MEANJI_URL}/word/${encodeURIComponent(w)}`}>{w}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <PartsTree tree={tree} onPartClick={onPartClick} />
 
       {similar?.length > 0 && (
@@ -94,19 +107,6 @@ export default function DetailsPage({ kanji, onPartClick }) {
                 className="part-item"
               >
                 {s.character}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {words?.length > 0 && (
-        <div className="kanji-words">
-          <p>この漢字を使った熟語(辞書で詳しく見る):</p>
-          <ul className="parts-list">
-            {words.map((w, i) => (
-              <li key={i} className="part-item">
-                <a href={`${MEANJI_URL}/word/${encodeURIComponent(w)}`}>{w}</a>
               </li>
             ))}
           </ul>
